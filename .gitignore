@@ -12,6 +12,9 @@ venv/
 *.egg-info/
 dist/
 build/
+# 保留随仓库发布的构建产物
+!/Gohot_bridge_mcp/dist/
+!/Gohot_bridge_mcp/dist/**
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
