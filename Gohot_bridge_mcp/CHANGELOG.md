@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### 新增
+
+- **图形化安装器**（`installer/`）：选择 Godot 工程 → 复制插件 → 自动启用 →
+  建独立 venv 装依赖 → 写入所选客户端配置。支持拖拽工程目录预填；三平台产物由
+  `.github/workflows/release-installers.yml` 构建。
+- 安装器命令行模式：`python -m installer --headless --project <工程> --client claude`
+  与卸载 `--uninstall`，便于脚本化与 CI 验证。
+
 ## 2.0.0 — 2026-11-14
 
 首个可用版本。v1 因 MCP Python SDK 2.x 将 `FastMCP` 改名为 `MCPServer` 而无法启动，

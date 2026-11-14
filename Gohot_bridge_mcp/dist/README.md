@@ -1,5 +1,19 @@
 # 构建产物 / Build artifacts — v2.0.0
 
+## 推荐：图形化安装器
+
+| 平台 | 文件 | 说明 |
+|---|---|---|
+| Windows | `GodotBridgeMCP-Setup-2.0.0-windows.exe` | 双击运行，无需终端 |
+| macOS | `GodotBridgeMCP-Setup-2.0.0-macos.zip` | 解压后双击 `.app`（未签名，首次需右键 → 打开） |
+| Linux | `GodotBridgeMCP-Setup-2.0.0-linux` | `chmod +x` 后运行 |
+
+安装器流程：选择工程 → 复制 `addons/godot_mcp` → 自动启用插件（改前备份 `project.godot.bak-mcp`）→ 建独立 venv 装依赖 → 写入所选 MCP 客户端配置。支持把工程文件夹拖到图标上预填路径。
+
+源码方式（无需打包）：`python -m installer`；命令行：`python -m installer --headless --project <工程> --client claude`。
+
+## 手动安装用包
+
 | 文件 | 用途 |
 |---|---|
 | `godot_bridge_mcp-2.0.0-py3-none-any.whl` | Python 服务端 wheel，`pip install` 后使用 `godot-bridge-mcp` 命令 |
@@ -26,9 +40,17 @@ python Gohot_bridge_mcp/addons/godot_mcp/server.py
 构建命令：
 
 ```bash
+# Python 包
 cd Gohot_bridge_mcp && python -m build
+
+# 插件 zip
 cd addons && zip -qr ../dist/godot-bridge-mcp-addon-2.0.0.zip godot_mcp
+
+# 安装器（当前平台）
+cd .. && pyinstaller installer/build.spec --noconfirm
 ```
+
+三平台安装器由 `.github/workflows/release-installers.yml` 在 tag 推送或手动触发时构建并上传到 Release。
 
 校验：
 

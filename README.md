@@ -37,6 +37,27 @@
 > 协议层由官方 MCP Python SDK 2.3 驱动，遵循 **2026-07-28** 规范（无状态核心、结构化输出、
 > 工具注解）；旧客户端走 1.x 兼容路径。
 
+### 一键安装（图形界面，推荐新手）
+
+不想碰命令行：从 [Releases](https://github.com/dgcrxs/Gohot_bridge_mcp/releases/latest) 下载对应平台的安装器，双击运行。
+
+| 平台 | 文件 |
+|---|---|
+| Windows | `GodotBridgeMCP-Setup-2.0.0-windows.exe` |
+| macOS | `GodotBridgeMCP-Setup-2.0.0-macos.zip`（解压后双击 `.app`） |
+| Linux | `GodotBridgeMCP-Setup-2.0.0-linux`（`chmod +x` 后运行） |
+
+安装器会替你完成四件事，全程不需要终端：
+
+1. 把 `addons/godot_mcp` 复制进你选的 Godot 工程
+2. 在 `project.godot` 里自动启用插件（保留原有其他插件，改前备份 `.bak-mcp`）
+3. 在 `~/.godot-bridge-mcp/venv` 建独立 Python 环境并装依赖，不污染系统 Python
+4. 按你选的客户端（Claude Code / Cursor / OpenCode / Codex / Cline）写配置文件
+
+也支持把工程文件夹**直接拖到安装器图标上**，路径会自动预填。卸载用同一个安装器的「卸载插件」按钮。
+
+> 安装器需要机器上有 Python 3.10+（用来建 venv）。没有的话请先用下面的手动方式。
+
 ### 30 秒接入
 
 ```bash

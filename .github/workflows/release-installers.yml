@@ -1,0 +1,274 @@
+name: Build installers
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to upload the installers to (e.g. v2.0.0)"
+        required: false
+        default: "v2.0.0"
+  push:
+    tags:
+      - "v*"
+
+#: The three matrix jobs upload into the *same* GitHub release, therefore all
+#: runs for a given ref are serialised. ``cancel-in-progress: false`` matters:
+#: cancelling halfway through the matrix would leave a release with only one of
+#: the three installers attached and no way to know which ones are missing.
+concurrency:
+  group: installers-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  #: Anything above this size means the spec needs more excludes.
+  MAX_INSTALLER_MB: "40"
+
+jobs:
+  build:
+    name: Build ${{ matrix.label }} installer
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      #: Run the matrix one job at a time. Three concurrent jobs hitting the
+      #: release API (``GET release by tag`` -> ``create``/``update``) race each
+      #: other: the second and third request can see a half-created release and
+      #: GitHub answers 422. Serialising is cheap here (the builds are quick)
+      #: and removes the race entirely.
+      max-parallel: 1
+      matrix:
+        include:
+          - os: windows-latest
+            label: windows
+            artifact: GodotBridgeMCP-Setup-windows
+          - os: macos-latest
+            label: macos
+            artifact: GodotBridgeMCP-Setup-macos
+          - os: ubuntu-latest
+            label: linux
+            artifact: GodotBridgeMCP-Setup-linux
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Linux build dependencies (Tk + X for the smoke tests)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-tk xvfb imagemagick
+
+      #: ``actions/setup-python`` ships a toolcache interpreter that is built
+      #: without ``_tkinter`` on Linux; ``apt install python3-tk`` only adds the
+      #: module to the *system* python. PyInstaller would then either fail with
+      #: "No module named _tkinter" or freeze a GUI that cannot start. Detect
+      #: that up front and fall back to a venv built from ``/usr/bin/python3``,
+      #: which does have Tk. The venv is put on ``$GITHUB_PATH`` so every later
+      #: step talks to the same interpreter.
+      - name: Ensure tkinter (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          if python -c "import tkinter" 2>/dev/null; then
+            echo "toolcache python has tkinter"
+            exit 0
+          fi
+          echo "falling back to /usr/bin/python3"
+          #: Tells "Install PyInstaller" to skip: re-running it with the
+          #: toolcache interpreter would not remove the venv from PATH, but it
+          #: installs a second copy for no reason and confuses the diagnosis.
+          echo "TK_FALLBACK=1" >> "$GITHUB_ENV"
+          /usr/bin/python3 -c "import tkinter, venv" || { sudo apt-get update; sudo apt-get install -y python3-tk python3-venv; }
+          /usr/bin/python3 -m venv .ci-venv
+          echo "$PWD/.ci-venv/bin" >> "$GITHUB_PATH"
+          .ci-venv/bin/python -m pip install --upgrade pip "pyinstaller>=6.0"
+
+      - name: Install PyInstaller
+        if: runner.os != 'Linux' || env.TK_FALLBACK != '1'
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "pyinstaller>=6.0"
+
+      #: One place that proves which Python/PyInstaller the build will use, no
+      #: matter whether the toolcache interpreter or the ``.ci-venv`` fallback
+      #: won. An empty version means ``python -m PyInstaller`` resolved to a
+      #: broken interpreter, which would surface much later as a confusing
+      #: freeze failure - so assert on it here.
+      - name: Verify PyInstaller
+        run: |
+          set -euo pipefail
+          echo "python: $(python -c 'import sys; print(sys.executable)')"
+          VERSION="$(python -m PyInstaller --version)"
+          echo "PyInstaller: ${VERSION}"
+          test -n "$VERSION"
+
+      - name: Build onefile windowed installer
+        run: |
+          set -euo pipefail
+          python -m PyInstaller installer/build.spec --noconfirm --clean --log-level INFO
+          ls -la dist
+
+      - name: Report artifact size
+        run: |
+          python - <<'PY'
+          import os
+          import pathlib
+
+          limit = int(os.environ.get("MAX_INSTALLER_MB", "40"))
+          for path in sorted(pathlib.Path("dist").glob("GodotBridgeMCP-Setup*")):
+              if not path.is_file():
+                  continue
+              size = path.stat().st_size
+              print("%s: %d bytes (%.1f MB)" % (path, size, size / 1048576.0))
+              if size > limit * 1048576:
+                  print("::warning file=installer/build.spec::%s exceeds %d MB, "
+                        "add more entries to EXCLUDES" % (path.name, limit))
+          PY
+
+      - name: Resolve installer version
+        id: version
+        run: |
+          VERSION="$(python -c 'import pathlib,re;t=pathlib.Path("installer/__init__.py").read_text();print(re.search(r"VERSION = \"([^\"]+)\"", t).group(1))')"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Installer version: $VERSION"
+
+      #: ``console=False`` (windowed) builds have no usable stdout on Windows -
+      #: ``__main__`` redirects it to ``os.devnull`` - so the version text simply
+      #: never arrives, while the exit code is still 0. On macOS the bare
+      #: binary in ``dist`` (not the ``.app``) normally runs fine, but a
+      #: Gatekeeper hiccup on an unsigned build must not fail the whole release.
+      #: Linux is the one platform where the output is guaranteed, so only there
+      #: the text is asserted - and the version it must contain is the source of
+      #: truth from ``installer/__init__.py``.
+      - name: Smoke test frozen installer (--version)
+        run: |
+          set -euo pipefail
+          BIN="dist/GodotBridgeMCP-Setup"
+          if [ -f "$BIN.exe" ]; then BIN="$BIN.exe"; fi
+          chmod +x "$BIN" || true
+          echo "smoke binary: $BIN"
+          EXPECTED="${{ steps.version.outputs.version }}"
+          if [ -z "$EXPECTED" ]; then EXPECTED="2.0.0"; fi
+
+          OUT="$(mktemp)"
+          set +e
+          "$BIN" --version > "$OUT" 2>&1
+          rc=$?
+          set -e
+          cat "$OUT" || true
+          echo "exit code: $rc"
+
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            # Linux always has a console: exit code *and* output are strict.
+            test "$rc" -eq 0
+            grep -q "$EXPECTED" "$OUT"
+            echo "linux --version smoke passed (contains $EXPECTED)"
+          else
+            if [ "$rc" -ne 0 ]; then
+              echo "::warning::--version smoke skipped (windowed build exited $rc, no console output expected)"
+            fi
+          fi
+          rm -f "$OUT"
+
+      - name: Smoke test frozen installer (headless + GUI, Linux)
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          BIN="dist/GodotBridgeMCP-Setup"
+          chmod +x "$BIN"
+
+          PROJ="$(mktemp -d)/SmokeGame"
+          mkdir -p "$PROJ"
+          printf 'config_version=5\n\n[application]\nconfig/name="SmokeGame"\n' > "$PROJ/project.godot"
+
+          echo "== headless install =="
+          OUT="$(xvfb-run -a "$BIN" --headless --project "$PROJ" --client cursor --no-venv --json)"
+          echo "$OUT"
+          echo "$OUT" | grep -q '"ok": true'
+          test -f "$PROJ/addons/godot_mcp/plugin.cfg"
+
+          echo "== GUI launch (expect timeout 124) =="
+          set +e
+          xvfb-run -a timeout 10 "$BIN" --project "$PROJ" > /dev/null 2>&1
+          rc=$?
+          set -e
+          echo "gui exit code: $rc"
+          test "$rc" -eq 124
+
+      - name: Resolve release tag
+        id: tag
+        run: |
+          TAG="${INPUT_TAG:-${GITHUB_REF_NAME}}"
+          if [ -z "$TAG" ] || [ "$TAG" = "refs/heads/main" ]; then
+            TAG="v2.0.0"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Resolved tag: $TAG"
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+
+      - name: Package artifact (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          mv "dist/GodotBridgeMCP-Setup.exe" "dist/GodotBridgeMCP-Setup-${VERSION}-windows.exe"
+          ls -la dist
+
+      - name: Package artifact (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          cd dist
+          if [ -d "GodotBridgeMCP-Setup.app" ]; then
+            zip -q -r -y "GodotBridgeMCP-Setup-${VERSION}-macos.zip" "GodotBridgeMCP-Setup.app"
+          else
+            chmod +x "GodotBridgeMCP-Setup"
+            zip -q "GodotBridgeMCP-Setup-${VERSION}-macos.zip" "GodotBridgeMCP-Setup"
+          fi
+          rm -rf "GodotBridgeMCP-Setup.app" "GodotBridgeMCP-Setup"
+          ls -la
+
+      - name: Package artifact (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          chmod +x "dist/GodotBridgeMCP-Setup"
+          mv "dist/GodotBridgeMCP-Setup" "dist/GodotBridgeMCP-Setup-${VERSION}-linux"
+          ls -lh dist
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}-${{ steps.version.outputs.version }}
+          path: |
+            dist/GodotBridgeMCP-Setup-*
+          if-no-files-found: error
+
+      #: Upload assets ONLY. Never pass ``body`` or ``name`` here: when the
+      #: release already exists (it does - the v2.0.0 release notes are written
+      #: by hand) ``softprops/action-gh-release`` replaces the release body with
+      #: whatever we send, so any text from this step would wipe the curated
+      #: notes. ``generate_release_notes`` must stay ``false`` for the same
+      #: reason: ``true`` regenerates and overwrites the body on existing
+      #: releases.
+      - name: Upload to GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          files: |
+            dist/GodotBridgeMCP-Setup-*
+          fail_on_unmatched_files: false
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

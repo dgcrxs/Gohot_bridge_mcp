@@ -1,4 +1,5 @@
-ea8e49788a1d750ca6ad691a710432010f937c14ba875df4ec989de953368528  godot-bridge-mcp-2.0.0-full.zip
 93276ac4711d266ea71304a4f014030234ef21651c6fd5af834ceff6b32ce5fb  godot_bridge_mcp-2.0.0-py3-none-any.whl
 d7303f573ed46d085c05725f37ab126e85b692b665ba8e457874d71e9d1a02d8  godot_bridge_mcp-2.0.0.tar.gz
 16768047d26b449335becd41b1588db0ad9175b9cae33483fbc6c7639879da86  godot-bridge-mcp-addon-2.0.0.zip
+ea8e49788a1d750ca6ad691a710432010f937c14ba875df4ec989de953368528  godot-bridge-mcp-2.0.0-full.zip
+ac1a4151c35b25ddf5ef7cee12e0a053a701bfb122347de8e1747bb5df81669a  GodotBridgeMCP-Setup-2.0.0-linux
