@@ -420,6 +420,8 @@ def run_install(
     run_script = _step("server", "部署 MCP 服务端", _server)
 
     python_exe = ""
+    python_args: List[str] = []
+    python_note = ""
     if make_venv:
         venv_state: Dict[str, Any] = {}
 
@@ -436,10 +438,16 @@ def run_install(
         _emit(progress, "跳过虚拟环境，使用当前 Python。")
 
     if not python_exe:
-        from .venv_setup import base_python
+        # Imported lazily: venv_setup imports InstallError from this module.
+        from .venv_setup import resolve_interpreter
 
-        python_exe = base_python()
-        _emit(progress, "使用当前 Python：%s" % python_exe)
+        interpreter = resolve_interpreter()
+        python_exe = str(interpreter["python"])
+        python_args = [str(arg) for arg in interpreter["args"]]
+        python_note = str(interpreter["note"])
+        _emit(progress, "使用当前 Python：%s" % " ".join([python_exe, *python_args]))
+        if python_note:
+            _emit(progress, "注意：只能找到 py 启动器，配置里会写 py -3。")
 
     config_state: Dict[str, Any] = {}
 
@@ -449,6 +457,8 @@ def run_install(
             project_dir,
             python_exe,
             server_script=run_script,
+            python_args=python_args,
+            note=python_note,
         )
         config_state["config"] = result
         if result["written"]:
@@ -464,6 +474,8 @@ def run_install(
         "ok": True,
         "steps": steps,
         "python": python_exe,
+        "python_args": python_args,
+        "python_note": python_note,
         "client_config": config_state.get("config", {}),
         "project": str(project_dir),
         "project_name": info["name"],

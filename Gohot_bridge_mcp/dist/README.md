@@ -4,9 +4,13 @@
 
 | 平台 | 文件 | 说明 |
 |---|---|---|
-| Windows | `GodotBridgeMCP-Setup-2.0.0-windows.exe` | 双击运行，无需终端 |
-| macOS | `GodotBridgeMCP-Setup-2.0.0-macos.zip` | 解压后双击 `.app`（未签名，首次需右键 → 打开） |
+| Windows | `GodotBridgeMCP-Setup-2.0.0-windows.exe` | 双击运行，无需终端、无需 Python 命令行 |
 | Linux | `GodotBridgeMCP-Setup-2.0.0-linux` | `chmod +x` 后运行 |
+| macOS | —（暂未提供 `.app`） | 用下面的「完整包 + 启动器」方式，见末节 |
+
+> macOS 的 `.app` 需要在 macOS 上构建。当前请下载 `godot-bridge-mcp-2.0.0-full.zip`，解压后执行：
+> `chmod +x installer/launch_macos.command && installer/launch_macos.command`
+> （或在访达里右键 → 打开）。它会以源码方式启动同一个图形界面。
 
 安装器流程：选择工程 → 复制 `addons/godot_mcp` → 自动启用插件（改前备份 `project.godot.bak-mcp`）→ 建独立 venv 装依赖 → 写入所选 MCP 客户端配置。支持把工程文件夹拖到图标上预填路径。
 

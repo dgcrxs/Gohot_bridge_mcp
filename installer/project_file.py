@@ -110,7 +110,9 @@ def set_enabled_items(text: str, items: Sequence[str]) -> str:
 
     Only the ``enabled=`` line is rewritten, every other line (comments,
     ordering, line endings) is kept untouched. A missing section or key is
-    created at the correct place.
+    created at the correct place: a fresh section is written exactly the way
+    Godot writes it (``[editor_plugins]`` immediately followed by ``enabled=``,
+    no blank line in between).
     """
     lines = text.splitlines(keepends=True)
     newline = detect_newline(text)
@@ -144,7 +146,9 @@ def set_enabled_items(text: str, items: Sequence[str]) -> str:
         body += newline
     if body.strip():
         body += newline
-    body += "[" + PLUGINS_SECTION + "]" + newline + newline + rendered
+    # Godot writes the section header followed directly by its keys, so do the
+    # same here instead of inserting a cosmetic (and non canonical) blank line.
+    body += "[" + PLUGINS_SECTION + "]" + newline + rendered
     return body
 
 

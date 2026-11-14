@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 from . import BACKUP_SUFFIX
 
@@ -130,15 +130,33 @@ def config_path(client: str, project: Path) -> Optional[Path]:
     return Path(project).expanduser() / str(rel)
 
 
-def _server_entry(client: str, python_exe: str, server_script: str) -> Dict[str, Any]:
-    """Build the client specific ``godot`` server entry."""
+def _server_entry(
+    client: str,
+    python_exe: str,
+    server_script: str,
+    python_args: Sequence[str] = (),
+) -> Dict[str, Any]:
+    """Build the client specific ``godot`` server entry.
+
+    Args:
+        client: Canonical client key.
+        python_exe: Interpreter (or ``py`` launcher) to start.
+        server_script: Absolute path of ``run_server.py``.
+        python_args: Arguments inserted between the interpreter and the script
+            (``["-3"]`` when only the ``py`` launcher is available).
+    Returns:
+        The ``godot`` entry for the client configuration file.
+    """
+    command = str(python_exe)
+    extra = [str(item) for item in python_args]
+    script = str(server_script)
     if client == "opencode":
         return {
             "type": "local",
-            "command": [python_exe, server_script],
+            "command": [command, *extra, script],
             "enabled": True,
         }
-    return {"command": python_exe, "args": [server_script]}
+    return {"command": command, "args": [*extra, script]}
 
 
 def _toml_string(value: str) -> str:
@@ -147,36 +165,43 @@ def _toml_string(value: str) -> str:
     return '"' + escaped + '"'
 
 
-def build_snippet(client: str, python_exe: str, server_script: str) -> str:
+def build_snippet(
+    client: str,
+    python_exe: str,
+    server_script: str,
+    python_args: Sequence[str] = (),
+) -> str:
     """Return a copy/paste ready configuration snippet for ``client``.
 
     Args:
         client: Canonical client key (or alias).
         python_exe: Absolute path of the interpreter that should run the server.
         server_script: Absolute path of ``run_server.py`` in the project.
+        python_args: Arguments inserted between the interpreter and the script.
     Returns:
         A JSON or TOML snippet, ready to paste into the client settings.
     """
     key = normalize_client(client)
     py = str(python_exe)
     script = str(server_script)
+    extra = [str(item) for item in python_args]
     if key == "codex":
         return "\n".join(
             [
                 "# Paste into " + CODEX_CONFIG_HINT,
                 "[mcp_servers." + SERVER_KEY + "]",
                 "command = " + _toml_string(py),
-                "args = [" + _toml_string(script) + "]",
+                "args = [" + ", ".join(_toml_string(item) for item in [*extra, script]) + "]",
             ]
         )
     payload: Dict[str, Any]
     if key == "opencode":
         payload = {
             "$schema": OPENCODE_SCHEMA,
-            "mcp": {SERVER_KEY: _server_entry(key, py, script)},
+            "mcp": {SERVER_KEY: _server_entry(key, py, script, extra)},
         }
     else:
-        payload = {"mcpServers": {SERVER_KEY: _server_entry(key, py, script)}}
+        payload = {"mcpServers": {SERVER_KEY: _server_entry(key, py, script, extra)}}
     return json.dumps(payload, indent=2, ensure_ascii=False)
 
 
@@ -189,6 +214,8 @@ def write_client_config(
     python_exe: str,
     *,
     server_script: str,
+    python_args: Sequence[str] = (),
+    note: str = "",
 ) -> Dict[str, Any]:
     """Write (or describe) the MCP client configuration for this project.
 
@@ -201,6 +228,9 @@ def write_client_config(
         project: Godot project root.
         python_exe: Interpreter of the venv (or the current interpreter).
         server_script: Absolute path of the generated ``run_server.py``.
+        python_args: Arguments inserted between the interpreter and the script
+            (for example ``["-3"]`` when the entry uses the ``py`` launcher).
+        note: Extra note to report back (for example ``"using py launcher"``).
     Returns:
         ``{"client", "label", "path", "written", "snippet", "backup", "note"}``
         where ``path`` is ``""`` for clients the installer cannot write.
@@ -209,7 +239,8 @@ def write_client_config(
     spec = CLIENTS[key]
     py = str(python_exe)
     script = str(server_script)
-    snippet = build_snippet(key, py, script)
+    notes: List[str] = [note] if note else []
+    snippet = build_snippet(key, py, script, python_args)
 
     result: Dict[str, Any] = {
         "client": key,
@@ -223,7 +254,8 @@ def write_client_config(
 
     rel = spec.get("path")
     if not spec.get("writes") or not rel:
-        result["note"] = "manual paste required: " + str(spec["hint"])
+        notes.append("manual paste required: " + str(spec["hint"]))
+        result["note"] = "; ".join(notes)
         return result
 
     project_dir = Path(project).expanduser()
@@ -245,7 +277,7 @@ def write_client_config(
                 loaded = json.loads(existing)
             except ValueError:
                 loaded = None
-                result["note"] = "existing file was not valid JSON, it was replaced"
+                notes.append("existing file was not valid JSON, it was replaced")
             if isinstance(loaded, dict):
                 data = loaded
 
@@ -253,7 +285,7 @@ def write_client_config(
     servers = data.get(container)
     if not isinstance(servers, dict):
         servers = {}
-    servers[SERVER_KEY] = _server_entry(key, py, script)
+    servers[SERVER_KEY] = _server_entry(key, py, script, python_args)
     data[container] = servers
     if key == "opencode":
         data.setdefault("$schema", OPENCODE_SCHEMA)
@@ -262,6 +294,7 @@ def write_client_config(
     target.write_text(text, encoding="utf-8", newline="\n")
     result["path"] = str(target)
     result["written"] = True
+    result["note"] = "; ".join(notes)
     return result
 
 
