@@ -118,7 +118,7 @@ headless 或无渲染环境没有帧缓冲。用带窗口的 Godot 运行游戏�
 
 ```bash
 pip install -e ".[dev]"
-pytest -q                     # 128 个用例（含假 Godot 服务）
+pytest -q                     # 129 个用例（含假 Godot 服务）
 pytest -q -m port_conflict    # 端口冲突场景（会重启 Godot）
 GODOT_BIN=/path/to/godot pytest -q tests/test_godot_editor.py
 ```
