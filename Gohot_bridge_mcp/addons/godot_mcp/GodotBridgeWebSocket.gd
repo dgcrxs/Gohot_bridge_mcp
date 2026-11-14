@@ -1,3 +1,4 @@
+# Deprecated: kept for v1 compatibility, not loaded.
 @tool
 extends EditorPlugin
 

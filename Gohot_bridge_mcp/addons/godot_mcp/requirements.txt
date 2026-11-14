@@ -1,2 +1,2 @@
-mcp>=1.0.0
+mcp>=1.30.0
 websockets>=12.0

@@ -1,0 +1,26 @@
+# Godot
+.godot/
+*.translation
+export.cfg
+export_presets.cfg
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# MCP bridge runtime
+mcp_bridge.json
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

@@ -1,0 +1,18 @@
+; Minimal Godot 4 project used by the Godot Bridge MCP test suite.
+; The addon is copied into addons/godot_mcp by tests/conftest.py.
+
+config_version=5
+
+[application]
+
+config/name="McpTest"
+run/main_scene="res://main.tscn"
+config/features=PackedStringArray("4.7")
+
+[autoload]
+
+McpRuntime="*res://addons/godot_mcp/runtime/mcp_runtime.gd"
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/godot_mcp/plugin.cfg")
